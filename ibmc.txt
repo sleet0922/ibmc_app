@@ -1,0 +1,51 @@
+# 1. 定义服务器信息（只改这里一次）
+HOST="192.168.3.100"
+USER="root"
+PASS="Zyz20050922!"
+
+# 2. 自动获取 Redfish Token（自动提取，无需手动复制）
+echo "正在获取 Token..."
+TOKEN=$(curl -k -s -i -X POST "https://$HOST/redfish/v1/SessionService/Sessions" \
+-H "Content-Type: application/json" \
+-d '{"UserName":"'"$USER"'","Password":"'"$PASS"'"}' \
+| grep -i "X-Auth-Token" | awk '{print $2}' | tr -d '\r')
+
+echo "获取到 Token：$TOKEN"
+
+# ------------------------------------------------------------------------------
+# 3. 上电
+echo -e "\n=== 执行 上电 ==="
+curl -k -X POST "https://$HOST/redfish/v1/Systems/1/Actions/ComputerSystem.Reset" \
+-H "X-Auth-Token: $TOKEN" \
+-H "Content-Type: application/json" \
+-d '{"ResetType":"On"}'
+
+# ------------------------------------------------------------------------------
+# 4. 优雅正常关机（正规安全，替换了原来的强制下电）
+echo -e "\n=== 执行 优雅正常关机 ==="
+curl -k -X POST "https://$HOST/redfish/v1/Systems/1/Actions/ComputerSystem.Reset" \
+-H "X-Auth-Token: $TOKEN" \
+-H "Content-Type: application/json" \
+-d '{"ResetType":"GracefulShutdown"}'
+
+# ------------------------------------------------------------------------------
+# 5. 查看当前上下电状态
+echo -e "\n=== 查看服务器电源状态 ==="
+curl -k "https://$HOST/redfish/v1/Systems/1" \
+-H "X-Auth-Token: $TOKEN"
+
+# ------------------------------------------------------------------------------
+# 6. 查看风扇模式 + 当前转速
+echo -e "\n=== 查看风扇信息 ==="
+curl -k "https://$HOST/redfish/v1/Chassis/1/Thermal" \
+-H "X-Auth-Token: $TOKEN"
+
+# ------------------------------------------------------------------------------
+# 7. 手动风扇 20% + 永不超时（华为 OEM）
+echo -e "\n=== 设置风扇 20% 手动模式（永不超时）==="
+curl -k -X PATCH "https://$HOST/redfish/v1/Chassis/1/Thermal" \
+-H "X-Auth-Token: $TOKEN" \
+-H "Content-Type: application/json" \
+-d '{"Oem":{"Huawei":{"FanSpeedAdjustmentMode":"Manual","FanSpeedLevelPercents":20,"FanManualModeTimeoutSeconds":0}}}'
+
+echo -e "\n所有操作执行完成！"
