@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <application
         android:usesCleartextTraffic="true"
-        android:label="ibmc_app"
+        android:label="iBMC 管理"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
