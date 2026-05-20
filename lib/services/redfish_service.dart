@@ -84,30 +84,119 @@ class RedfishService {
     final data = jsonDecode(response) as Map<String, dynamic>;
 
     final fans = data['Fans'] as List<dynamic>?;
-    if (fans == null || fans.isEmpty) {
-      return '未找到风扇信息';
-    }
+    final oem = data['Oem']?['Huawei'] as Map<String, dynamic>?;
 
     final sb = StringBuffer();
-    sb.writeln('=== 风扇信息 ===');
+
+    // 风扇模式 + 剩余时间
+    if (oem != null) {
+      final mode = oem['FanSpeedAdjustmentMode'] ?? 'Unknown';
+      final speed = oem['FanSpeedLevelPercents'];
+      final timeoutSec = oem['FanManualModeTimeoutSeconds'];
+      sb.write('模式: $mode');
+      if (speed != null) sb.write(' | 转速: $speed%');
+      if (timeoutSec != null && timeoutSec is num) {
+        final hours = timeoutSec / 3600;
+        sb.write(' | 保持剩余: ${hours.toStringAsFixed(1)} 小时');
+      }
+      sb.writeln();
+      sb.writeln();
+    }
+
+    if (fans == null || fans.isEmpty) {
+      sb.writeln('未找到风扇数据');
+      return sb.toString();
+    }
+
     for (final fan in fans) {
       final f = fan as Map<String, dynamic>;
-      final name = f['Name'] ?? f['MemberId'] ?? 'Unknown';
+      final name = f['Name'] ?? f['MemberId'] ?? '?';
       final reading = f['Reading'] ?? 'N/A';
       final unit = f['ReadingUnits'] ?? '';
-      final status = f['Status']?['State'] ?? 'N/A';
-      sb.writeln('$name: $reading $unit (状态: $status)');
+      sb.writeln('$name: $reading $unit');
     }
     return sb.toString();
   }
 
-  Future<String> getRawThermal() async {
+  static const _tempNameMap = {
+    'Inlet Temp': '进风口',
+    'Outlet Temp': '出风口',
+    'CPU1 Temp': 'CPU1',
+    'CPU2 Temp': 'CPU2',
+    'CPU1 Core Rem': 'CPU1核心',
+    'CPU2 Core Rem': 'CPU2核心',
+    'CPU1 DTS': 'CPU1 DTS传感器',
+    'CPU2 DTS': 'CPU2 DTS传感器',
+    'DTS Temp': 'DTS传感器',
+    'DTS': 'DTS传感器',
+    'PCH Temp': 'PCH芯片',
+    'DIMM Temp': '内存',
+    'DIMM Area Temp': '内存区域',
+    'MEM Temp': '内存',
+    'MEM': '内存',
+    'VDDQ Temp': '内存VDDQ',
+    'VDDQ': '内存VDDQ',
+    'VRD Temp': 'VRD供电',
+    'VRD': 'VRD供电',
+    'RAID Temp': 'RAID卡',
+    'SSD Temp': '固态硬盘',
+    'Disk Temp': '硬盘',
+    'HDD Temp': '机械硬盘',
+    'BMC Temp': 'BMC管理芯片',
+    'Ambient Temp': '环境温度',
+    'NIC Temp': '网卡',
+    'Rear Disk Temp': '后置硬盘',
+    'RearDisk Temp': '后置硬盘',
+    'REARDISK': '后置硬盘',
+  };
+
+  String _translateTempName(String rawName) {
+    // 1. 精确匹配
+    if (_tempNameMap.containsKey(rawName)) return _tempNameMap[rawName]!;
+    // 2. 去掉尾部 " Temp" 再匹配
+    if (rawName.endsWith(' Temp')) {
+      final stem = rawName.substring(0, rawName.length - 5);
+      if (_tempNameMap.containsKey(stem)) return _tempNameMap[stem]!;
+    }
+    // 3. 子串模糊匹配 (大小写不敏感)
+    final lower = rawName.toLowerCase();
+    for (final entry in _tempNameMap.entries) {
+      if (lower.contains(entry.key.toLowerCase()) || entry.key.toLowerCase().contains(lower)) {
+        return entry.value;
+      }
+    }
+    return rawName;
+  }
+
+  Future<String> getTemperatures() async {
     _ensureConnected();
     final uri = Uri.parse('https://$_host/redfish/v1/Chassis/1/Thermal');
     final response = await _get(uri);
     final data = jsonDecode(response) as Map<String, dynamic>;
-    const encoder = JsonEncoder.withIndent('  ');
-    return encoder.convert(data);
+
+    final temps = data['Temperatures'] as List<dynamic>?;
+    if (temps == null || temps.isEmpty) {
+      return '未找到温度传感器数据';
+    }
+
+    final sb = StringBuffer();
+    for (final t in temps) {
+      final temp = t as Map<String, dynamic>;
+      final rawName = temp['Name'] as String? ?? temp['MemberId'] ?? '?';
+      final name = _translateTempName(rawName);
+      final reading = temp['ReadingCelsius'];
+
+      final icon = reading == null ? '⬜'
+          : (temp['UpperThresholdCritical'] != null && reading >= (temp['UpperThresholdCritical'] as num))
+              ? '🔴'
+              : (temp['UpperThresholdNonCritical'] != null && reading >= (temp['UpperThresholdNonCritical'] as num))
+                  ? '🟡'
+                  : '🟢';
+
+      sb.writeln('$icon $name: ${reading ?? "N/A"}°C');
+    }
+
+    return sb.toString();
   }
 
 Future<String> setFanSpeed(int percent, {int timeoutSeconds = 4294967295}) async {
