@@ -31,13 +31,10 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _loadSavedCredentials() async {
     final prefs = await SharedPreferences.getInstance();
-    final host = prefs.getString('ibmc_host') ?? '';
-    final user = prefs.getString('ibmc_user') ?? '';
-    final pass = prefs.getString('ibmc_pass') ?? '';
     setState(() {
-      _hostController.text = host;
-      _userController.text = user;
-      _passController.text = pass;
+      _hostController.text = prefs.getString('ibmc_host') ?? '';
+      _userController.text = prefs.getString('ibmc_user') ?? '';
+      _passController.text = prefs.getString('ibmc_pass') ?? '';
     });
   }
 
@@ -75,7 +72,7 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       setState(() => _errorText = '登录失败: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -103,46 +100,55 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: SizedBox(
+              width: 400,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const SizedBox(height: 16),
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Icon(
-                      Icons.dns_rounded,
-                      size: 40,
-                      color: theme.colorScheme.primary,
+                  const SizedBox(height: 40),
+
+                  // Logo 区域
+                  Center(
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: Icon(
+                        Icons.dns_rounded,
+                        size: 36,
+                        color: theme.colorScheme.primary,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 24),
+
+                  const SizedBox(height: 28),
+
+                  // 标题
                   Text(
                     'iBMC',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.headlineLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 2,
-                      color: theme.colorScheme.primary,
+                      color: theme.colorScheme.onSurface,
+                      letterSpacing: 1,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
-                    '服务器管理',
+                    '服务器管理控制台',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  const SizedBox(height: 40),
+
+                  const SizedBox(height: 44),
+
+                  // 输入框组 — 用 Column 间距替代 SizedBox
                   TextField(
                     controller: _hostController,
                     focusNode: _hostFocus,
@@ -152,10 +158,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     decoration: const InputDecoration(
                       labelText: 'IP 地址',
                       hintText: '192.168.3.100',
-                      prefixIcon: Icon(Icons.language_rounded),
+                      prefixIcon: Icon(Icons.language_rounded, size: 20),
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: _userController,
                     focusNode: _userFocus,
@@ -164,10 +170,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     decoration: const InputDecoration(
                       labelText: '用户名',
                       hintText: 'Administrator',
-                      prefixIcon: Icon(Icons.person_outline_rounded),
+                      prefixIcon: Icon(Icons.person_outline_rounded, size: 20),
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
                   TextField(
                     controller: _passController,
                     focusNode: _passFocus,
@@ -176,7 +182,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     onSubmitted: (_) => _loginAndSave(),
                     decoration: InputDecoration(
                       labelText: '密码',
-                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                      prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
                       suffixIcon: IconButton(
                         icon: Icon(
                           _obscurePass ? Icons.visibility_off_rounded : Icons.visibility_rounded,
@@ -186,46 +192,67 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
+
+                  // 错误提示
                   if (_errorText != null) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
-                        color: theme.colorScheme.error.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
+                        color: theme.colorScheme.error.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: theme.colorScheme.error.withValues(alpha: 0.2),
+                        ),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.error_outline_rounded, size: 18, color: theme.colorScheme.error),
+                          Icon(
+                            Icons.error_outline_rounded,
+                            size: 18,
+                            color: theme.colorScheme.error,
+                          ),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
                               _errorText!,
-                              style: TextStyle(color: theme.colorScheme.error, fontSize: 13),
+                              style: TextStyle(
+                                color: theme.colorScheme.error,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
                         ],
                       ),
                     ),
                   ],
-                  const SizedBox(height: 24),
+
+                  const SizedBox(height: 28),
+
+                  // 主按钮
                   FilledButton.icon(
                     onPressed: _isLoading ? null : _loginAndSave,
                     icon: _isLoading
                         ? const SizedBox(
                             width: 20,
                             height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2.5),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
                           )
                         : const Icon(Icons.login_rounded, size: 20),
                     label: Text(_isLoading ? '连接中...' : '保存并登录'),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   OutlinedButton.icon(
                     onPressed: _isLoading ? null : _login,
                     icon: const Icon(Icons.wifi_find_rounded, size: 20),
                     label: const Text('仅登录'),
                   ),
+
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
