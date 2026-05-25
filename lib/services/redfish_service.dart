@@ -77,6 +77,34 @@ class RedfishService {
     return '电源状态: $powerState';
   }
 
+  Future<String> getPower() async {
+    _ensureConnected();
+    final uri = Uri.parse('https://$_host/redfish/v1/Chassis/1/Power');
+    final response = await _get(uri);
+    final data = jsonDecode(response) as Map<String, dynamic>;
+
+    final controls = data['PowerControl'] as List<dynamic>?;
+    if (controls == null || controls.isEmpty) {
+      return '未找到功率数据';
+    }
+
+    final ctrl = controls[0] as Map<String, dynamic>;
+    final current = ctrl['PowerConsumedWatts'];
+    final metrics = ctrl['PowerMetrics'] as Map<String, dynamic>?;
+
+    final sb = StringBuffer();
+    if (current != null) sb.writeln('当前功率: $current W');
+    if (metrics != null) {
+      final min = metrics['MinConsumedWatts'];
+      final max = metrics['MaxConsumedWatts'];
+      final avg = metrics['AverageConsumedWatts'];
+      if (min != null) sb.writeln('最低: $min W');
+      if (max != null) sb.writeln('最高: $max W');
+      if (avg != null) sb.writeln('平均: $avg W');
+    }
+    return sb.toString().trimRight();
+  }
+
   Future<String> getFanInfo() async {
     _ensureConnected();
     final uri = Uri.parse('https://$_host/redfish/v1/Chassis/1/Thermal');

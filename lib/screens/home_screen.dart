@@ -48,7 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tileWidth = (MediaQuery.of(context).size.width - 32 - 20) / 5;
+    final tileWidth = (MediaQuery.of(context).size.width - 32 - 10) / 3;
 
     return Scaffold(
       appBar: AppBar(
@@ -72,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
         child: Column(
           children: [
-            // ---- 操作按钮行 ----
+            // ---- 操作按钮 2行 ----
             Row(
               children: [
                 _tile('上电', Icons.power_settings_new_rounded, const Color(0xFF4CAF50), tileWidth, () => _execute(widget.service.powerOn)),
@@ -80,10 +80,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 _tile('下电', Icons.power_off_rounded, const Color(0xFFFF7043), tileWidth, () => _execute(widget.service.gracefulShutdown)),
                 const SizedBox(width: 5),
                 _tile('电源', Icons.info_outline_rounded, const Color(0xFF42A5F5), tileWidth, () => _execute(widget.service.getPowerStatus)),
-                const SizedBox(width: 5),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
                 _tile('转速', Icons.air_rounded, const Color(0xFF26C6DA), tileWidth, () => _execute(widget.service.getFanInfo)),
                 const SizedBox(width: 5),
                 _tile('温度', Icons.thermostat_rounded, const Color(0xFF66BB6A), tileWidth, () => _execute(widget.service.getTemperatures)),
+                const SizedBox(width: 5),
+                _tile('功率', Icons.bolt_rounded, const Color(0xFFFFCA28), tileWidth, () => _execute(widget.service.getPower)),
               ],
             ),
 
