@@ -1,5 +1,5 @@
-// ignore_for_file: avoid_print
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:io';
 import 'package:dartssh2/dartssh2.dart';
 
@@ -13,17 +13,17 @@ class RedfishService {
     ..badCertificateCallback = (cert, host, port) => true;
 
   Future<String> _sshExecute(String command) async {
-    print('[iBMC] SSH 连接 $_host:22...');
+    log('[iBMC] SSH 连接 $_host:22...');
     final socket = await SSHSocket.connect(_host, 22);
     final client = SSHClient(
       socket,
       username: _user,
       onPasswordRequest: () => _pass,
     );
-    print('[iBMC] SSH 已连接，执行: $command');
+    log('[iBMC] SSH 已连接，执行: $command');
     final result = await client.run(command);
     final output = utf8.decode(result);
-    print('[iBMC] SSH 输出: $output');
+    log('[iBMC] SSH 输出: $output');
     client.close();
     await socket.close();
     return output;
@@ -227,11 +227,11 @@ class RedfishService {
     return sb.toString();
   }
 
-Future<String> setFanSpeed(int percent, {int timeoutSeconds = 4294967295}) async {
-    print('[iBMC] ===== 开始设置风扇转速: $percent%, timeout: $timeoutSeconds =====');
+  Future<String> setFanSpeed(int percent, {int timeoutSeconds = 4294967295}) async {
+    log('[iBMC] ===== 开始设置风扇转速: $percent%, timeout: $timeoutSeconds =====');
 
     try {
-      print('[iBMC] 尝试 SSH 直连 iBMC...');
+      log('[iBMC] 尝试 SSH 直连 iBMC...');
       if (percent == 0) {
         final output = await _sshExecute('ipmcset -d fanmode -v 0');
         return 'SSH: 已切换为自动模式\n$output';
@@ -241,20 +241,20 @@ Future<String> setFanSpeed(int percent, {int timeoutSeconds = 4294967295}) async
         return 'SSH: 已设置手动 $percent% (永久)\n$levelOutput\n$modeOutput';
       }
     } catch (e) {
-      print('[iBMC] SSH 失败，回退到 Redfish API: $e');
+      log('[iBMC] SSH 失败，回退到 Redfish API: $e');
     }
 
     _ensureConnected();
-    print('[iBMC] 回退到 Redfish API...');
+    log('[iBMC] 回退到 Redfish API...');
 
     final uri = Uri.parse('https://$_host/redfish/v1/Chassis/1/Thermal');
 
-    print('[iBMC] 步骤1: GET 获取 ETag...');
+    log('[iBMC] 步骤1: GET 获取 ETag...');
     final getRequest = await _client.getUrl(uri);
     getRequest.headers.set('X-Auth-Token', _token!);
     final getResponse = await getRequest.close();
     final etag = getResponse.headers['etag']?.first;
-    print('[iBMC] GET 状态码: ${getResponse.statusCode}, ETag: $etag');
+    log('[iBMC] GET 状态码: ${getResponse.statusCode}, ETag: $etag');
 
     String body;
     String mode;
@@ -279,28 +279,28 @@ Future<String> setFanSpeed(int percent, {int timeoutSeconds = 4294967295}) async
       });
       mode = '手动 $percent%';
     }
-    print('[iBMC] 请求体: $body');
+    log('[iBMC] 请求体: $body');
 
     for (int attempt = 0; attempt < 3; attempt++) {
-      print('[iBMC] 第 ${attempt + 1} 次尝试 PATCH 请求...');
+      log('[iBMC] 第 ${attempt + 1} 次尝试 PATCH 请求...');
       try {
         final request = await _client.openUrl('PATCH', uri);
         request.headers.set('Content-Type', 'application/json');
         request.headers.set('X-Auth-Token', _token!);
         if (etag != null && etag.isNotEmpty) {
           request.headers.set('If-Match', etag);
-          print('[iBMC] 带上 If-Match: $etag');
+          log('[iBMC] 带上 If-Match: $etag');
         }
         request.write(body);
 
         final response = await request.close();
         final statusCode = response.statusCode;
         final responseBody = await response.transform(utf8.decoder).join();
-        print('[iBMC] 响应状态码: $statusCode');
-        print('[iBMC] 响应体: "$responseBody"');
+        log('[iBMC] 响应状态码: $statusCode');
+        log('[iBMC] 响应体: "$responseBody"');
 
         if (statusCode == 200 || statusCode == 204) {
-          print('[iBMC] 风扇设置成功!');
+          log('[iBMC] 风扇设置成功!');
           final data = jsonDecode(responseBody) as Map<String, dynamic>;
           final actualTimeout = data['Oem']?['Huawei']?['FanManualModeTimeoutSeconds'];
           if (actualTimeout != null) {
@@ -309,20 +309,20 @@ Future<String> setFanSpeed(int percent, {int timeoutSeconds = 4294967295}) async
           return '风扇已切换为 $mode模式';
         }
         if (statusCode == 412) {
-          print('[iBMC] 收到412, 第 ${attempt + 1} 次失败');
+          log('[iBMC] 收到412, 第 ${attempt + 1} 次失败');
           if (attempt < 2) {
-            print('[iBMC] 等待500ms后重试...');
+            log('[iBMC] 等待500ms后重试...');
             await Future.delayed(const Duration(milliseconds: 500));
             continue;
           }
           return '设置风扇转速失败(412)，ETag 不匹配，请重试';
         }
-        print('[iBMC] 未知状态码, 抛出异常');
+        log('[iBMC] 未知状态码, 抛出异常');
         throw Exception('设置风扇转速失败。响应码: $statusCode\n$responseBody');
       } on HttpException catch (e) {
-        print('[iBMC] HttpException: ${e.message}');
+        log('[iBMC] HttpException: ${e.message}');
         if (attempt < 2) {
-          print('[iBMC] 等待800ms后重试...');
+          log('[iBMC] 等待800ms后重试...');
           await Future.delayed(const Duration(milliseconds: 800));
           continue;
         }
@@ -330,117 +330,8 @@ Future<String> setFanSpeed(int percent, {int timeoutSeconds = 4294967295}) async
       }
     }
 
-    print('[iBMC] 所有重试均失败');
+    log('[iBMC] 所有重试均失败');
     return '设置风扇转速失败，请稍后重试';
-  }
-
-  Future<String> setFanTimeoutOnly(int timeoutSeconds) async {
-    _ensureConnected();
-    print('[iBMC] ===== 仅设置超时: $timeoutSeconds =====');
-
-    final uri = Uri.parse('https://$_host/redfish/v1/Chassis/1/Thermal');
-
-    print('[iBMC] 步骤1: GET 获取 ETag...');
-    final getRequest = await _client.getUrl(uri);
-    getRequest.headers.set('X-Auth-Token', _token!);
-    final getResponse = await getRequest.close();
-    final etag = getResponse.headers['etag']?.first;
-    print('[iBMC] GET 状态码: ${getResponse.statusCode}, ETag: $etag');
-
-    final body = jsonEncode({
-      'Oem': {
-        'Huawei': {
-          'FanManualModeTimeoutSeconds': timeoutSeconds,
-        },
-      },
-    });
-    print('[iBMC] 请求体: $body');
-
-    for (int attempt = 0; attempt < 3; attempt++) {
-      print('[iBMC] 第 ${attempt + 1} 次尝试 PATCH 请求...');
-      try {
-        final request = await _client.openUrl('PATCH', uri);
-        request.headers.set('Content-Type', 'application/json');
-        request.headers.set('X-Auth-Token', _token!);
-        if (etag != null && etag.isNotEmpty) {
-          request.headers.set('If-Match', etag);
-          print('[iBMC] 带上 If-Match: $etag');
-        }
-        request.write(body);
-
-        final response = await request.close();
-        final statusCode = response.statusCode;
-        final responseBody = await response.transform(utf8.decoder).join();
-        print('[iBMC] 响应状态码: $statusCode');
-        print('[iBMC] 响应体: "$responseBody"');
-
-        if (statusCode == 200 || statusCode == 204) {
-          print('[iBMC] 超时设置成功!');
-          final data = jsonDecode(responseBody) as Map<String, dynamic>;
-          final actualTimeout = data['Oem']?['Huawei']?['FanManualModeTimeoutSeconds'];
-          if (actualTimeout != null) {
-            return '超时设置成功，实际超时: ${actualTimeout}s';
-          }
-          return '超时设置成功';
-        }
-        if (statusCode == 412) {
-          print('[iBMC] 收到412, 第 ${attempt + 1} 次失败');
-          if (attempt < 2) {
-            print('[iBMC] 等待500ms后重试...');
-            await Future.delayed(const Duration(milliseconds: 500));
-            continue;
-          }
-          return '设置超时失败(412)，ETag 不匹配，请重试';
-        }
-        print('[iBMC] 未知状态码, 抛出异常');
-        throw Exception('设置超时失败。响应码: $statusCode\n$responseBody');
-      } on HttpException catch (e) {
-        print('[iBMC] HttpException: ${e.message}');
-        if (attempt < 2) {
-          print('[iBMC] 等待800ms后重试...');
-          await Future.delayed(const Duration(milliseconds: 800));
-          continue;
-        }
-        return '设置超时失败：服务器连接中断，请重试';
-      }
-    }
-
-    print('[iBMC] 所有重试均失败');
-    return '设置超时失败，请稍后重试';
-  }
-
-  Future<String> testMaxTimeout() async {
-    _ensureConnected();
-    final results = StringBuffer();
-    results.writeln('=== 测试 iBMC 最大超时值 ===');
-
-    final testValues = [1, 10, 30, 60, 300, 3600, 86400, 604800, 4294967295];
-
-    for (final timeout in testValues) {
-      try {
-        final result = await setFanSpeed(20, timeoutSeconds: timeout);
-        results.writeln('timeout=$timeout -> $result');
-
-        final uri = Uri.parse('https://$_host/redfish/v1/Chassis/1/Thermal');
-        final getRequest = await _client.getUrl(uri);
-        getRequest.headers.set('X-Auth-Token', _token!);
-        final getResponse = await getRequest.close();
-        final responseBody = await getResponse.transform(utf8.decoder).join();
-        final data = jsonDecode(responseBody) as Map<String, dynamic>;
-        final actualTimeout = data['Oem']?['Huawei']?['FanManualModeTimeoutSeconds'];
-        results.writeln('  实际存储值: ${actualTimeout}s');
-
-        if (actualTimeout != timeout) {
-          results.writeln('  ⚠️ 被截断了! 最大值约 $actualTimeout');
-          break;
-        }
-      } catch (e) {
-        results.writeln('timeout=$timeout -> 失败: $e');
-      }
-      await Future.delayed(const Duration(milliseconds: 300));
-    }
-
-    return results.toString();
   }
 
   void _ensureConnected() {
@@ -479,5 +370,9 @@ Future<String> setFanSpeed(int percent, {int timeoutSeconds = 4294967295}) async
       throw Exception('请求失败。响应码: ${response.statusCode}');
     }
     return response.transform(utf8.decoder).join();
+  }
+
+  void dispose() {
+    _client.close();
   }
 }
